@@ -189,11 +189,9 @@ void initADC(void) {
 
 int main(void) {
 
-  //unsigned char channels[8] = {0b10000000,0b10000001,0b10000010,0b10000011,0b10000100,0b10000101,0b10001000,0b10001001};
-  //unsigned char ioChannelA = 0x00,ioChannelB = 0x00,inSpi = 0x00,adcResults[2][8],lo,hi,currentIOA = 0x00,currentIOB = 0x00;
-  //int count = 0,nLoop = 0;
-  int nLoop = 0;
-  unsigned char ioChannelA = 0x00,ioChannelB = 0x00,inSpi = 0x00,lo,hi;
+  unsigned char channels[8] = {0b10000000,0b10000001,0b10000010,0b10000011,0b10000100,0b10000101,0b10001001,0b10001011};
+  unsigned char ioChannelA = 0x00,ioChannelB = 0x00,inSpi = 0x00,adcResults[2][8],lo,hi;
+  int count = 0,nLoop = 0;
 
   initADC();
   internalSpiInit();
@@ -203,20 +201,23 @@ int main(void) {
   internalSpiReadWrite(IOCONA,0x00,0x00);   // I/O Control Register: BANK=0, SEQOP=0, HAEN=0 (Disable Addressing)
   internalSpiReadWrite(IODIRA,0x00,0x00);   // GPIOA As Output
   internalSpiReadWrite(IODIRB,0x00,0x00);   // GPIOB As Output
-  //internalSpiReadWrite(GPPUB,0xFF,0x00);  // Enable Pull-up Resistor on GPIOB
   internalSpiReadWrite(GPIOA,0x00,0x00);    // Reset Output on GPIOA
   internalSpiReadWrite(GPIOB,0x00,0x00);    // Reset Output on GPIOB
+
+  for (count = 0; count < 8; count++) {
+    adcResults[0][count] = 0xA0;
+    adcResults[1][count] = 0x02;
+  }
 
   _delay_ms(20);
 
   while(1) {
 
     // start adc for 8 channels
-    //for (count = 0; count < 8; count++) {
+    for (count = 0; count < 8; count++) {
       // 1.1V as ref + channel[x] lookup
-      //ADMUX  = channels[count];      
-      ADMUX  = 0b10000101;      
-      _delay_us(2);
+      ADMUX  = channels[count];      
+      _delay_us(200);
       // ensure adc has stabilised
       for (nLoop = 0; nLoop < 5 ; nLoop++) {
         ADCSRA |= (1<<ADSC);
@@ -224,36 +225,27 @@ int main(void) {
         lo = ADCL;
         hi = ADCH;
       }
-      //adcResults[0][count] = lo;
-      //adcResults[1][count] = hi;
-    //}
+      adcResults[0][count] = lo;
+      adcResults[1][count] = hi;
+      _delay_us(10);
+    }
 
     // wait for input from master
     inSpi = externalSpiGet();
     // valid address
-    //if ((inSpi & 0b11111111) == 0b00000010) {
-      // get ioChannel A+B code's to switch outputs
-    //} 
     if ((inSpi & 0b11111111) == 0b00000001) {
-      //for (count = 0; count < 8; count++) {
-        externalSpiPut(lo);
-        externalSpiPut(hi);
-        ioChannelA = externalSpiGet();
-        internalSpiReadWrite(GPIOA,ioChannelA,0x00);
-        ioChannelB = externalSpiGet();
-        internalSpiReadWrite(GPIOB,ioChannelB,0x00);
-      //}
+      for (count = 0; count < 8; count++) {
+        // set lo and hi byte for spi master to read for each channel
+        externalSpiPut(adcResults[0][count]);
+        externalSpiPut(adcResults[1][count]);
+      }
+      // read from master for upper and lower ranges
+      ioChannelA = externalSpiGet();
+      internalSpiReadWrite(GPIOA,ioChannelA,0x00);
+      ioChannelB = externalSpiGet();
+      internalSpiReadWrite(GPIOB,ioChannelB,0x00);
     }
-
-    // no need to update if there is no change
-    //if (currentIOA != ioChannelA) {
-      // set output 
-
-    //}
-    //if (currentIOB != ioChannelB) {
-    //currentIOA = ioChannelA;
-    //currentIOB = ioChannelB;
-
+    _delay_ms(20); 
   }
 
   return(0);
